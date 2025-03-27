@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floresta de Dados Interativa</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f8ff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        #container {
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+
+        #visualization {
+            width: 100%;
+            height: 600px;
+            background-color: #e6f7ff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        #tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 14px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .node {
+            transition: opacity 0.3s;
+        }
+
+        .node:hover {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Floresta de Dados Interativa</h1>
+        <div id="visualization"></div>
+        <div id="controls">
+            <button id="reset">Resetar Visualização</button>
+            <div id="tooltip" class="hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        // Dados embutidos (substitui o arquivo CSV)
+        const data = [
+            {category: "Arte", value: 85},
+            {category: "Música", value: 92},
+            {category: "Literatura", value: 78},
+            {category: "Cinema", value: 88},
+            {category: "Teatro", value: 65},
+            {category: "Dança", value: 72},
+            {category: "Fotografia", value: 81},
+            {category: "Design", value: 90},
+            {category: "Arquitetura", value: 83},
+            {category: "Escultura", value: 68},
+            {category: "Pintura", value: 95},
+            {category: "Grafite", value: 70},
+            {category: "Cerâmica", value: 63},
+            {category: "Moda", value: 87},
+            {category: "Digital", value: 94}
+        ];
+
+        // Configurações iniciais
+        const width = 900;
+        const height = 600;
+        const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+        // Criar SVG principal
+        const svg = d3.select("#visualization")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("viewBox", [0, 0, width, height])
+            .call(d3.zoom()
+                .scaleExtent([0.5, 8])
+                .on("zoom", zoomed))
+            .append("g");
+
+        // Adicionar clipPath para zoom
+        svg.append("clipPath")
+            .attr("id", "clip")
+            .append("rect")
+            .attr("width", width)
+            .attr("height", height);
+
+        // Grupo para conter todos os elementos com clipPath
+        const g = svg.append("g")
+            .attr("clip-path", "url(#clip)");
+
+        // Tooltip
+        const tooltip = d3.select("#tooltip");
+
+        // Processar dados
+        data.forEach(d => {
+            d.value = +d.value;
+            d.category = d.category;
+        });
+
+        // Criar quadtree para interação
+        const quadtree = d3.quadtree()
+            .x(d => d.x)
+            .y(d => d.y)
+            .addAll(data.map(d => {
+                // Posições aleatórias iniciais
+                d.x = Math.random() * width;
+                d.y = Math.random() * height;
+                return d;
+            }));
+
+        // Criar visualização artística - "Floresta de Dados"
+        const nodes = g.selectAll(".node")
+            .data(data)
+            .enter()
+            .append("g")
+            .attr("class", "node")
+            .attr("transform", d => `translate(${d.x},${d.y})`)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        // Adicionar círculos (troncos das árvores)
+        nodes.append("circle")
+            .attr("r", d => Math.sqrt(d.value) * 2)
+            .attr("fill", d => d3.interpolateYlGn(d.value / 100))
+            .on("mouseover", showTooltip)
+            .on("mouseout", hideTooltip);
+
+        // Adicionar retângulos (folhagem - mais artístico)
+        nodes.append("rect")
+            .attr("x", d => -Math.sqrt(d.value) * 1.5)
+            .attr("y", d => -Math.sqrt(d.value) * 4)
+            .attr("width", d => Math.sqrt(d.value) * 3)
+            .attr("height", d => Math.sqrt(d.value) * 3)
+            .attr("fill", d => d3.interpolateGreens(d.value / 150))
+            .attr("opacity", 0.7)
+            .transition()
+            .duration(1000)
+            .attr("y", d => -Math.sqrt(d.value) * 6)
+            .attr("height", d => Math.sqrt(d.value) * 5);
+
+        // Adicionar texto (rótulos)
+        nodes.append("text")
+            .attr("dy", 4)
+            .text(d => d.category.substring(0, 3))
+            .attr("font-size", d => Math.sqrt(d.value) / 2 + "px")
+            .attr("text-anchor", "middle")
+            .attr("fill", "#333");
+
+        // Função de zoom
+        function zoomed(event) {
+            g.attr("transform", event.transform);
+        }
+
+        // Funções de drag
+        function dragstarted(event, d) {
+            d3.select(this).raise().attr("stroke", "#000");
+        }
+
+        function dragged(event, d) {
+            d3.select(this).attr("transform", `translate(${d.x = event.x},${d.y = event.y})`);
+            quadtree.remove(d);
+            quadtree.add(d);
+        }
+
+        function dragended(event, d) {
+            d3.select(this).attr("stroke", null);
+        }
+
+        // Funções do tooltip
+        function showTooltip(event, d) {
+            tooltip
+                .classed("hidden", false)
+                .html(`<strong>${d.category}</strong><br>Valor: ${d.value}`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        }
+
+        function hideTooltip() {
+            tooltip.classed("hidden", true);
+        }
+
+        // Botão de reset
+        d3.select("#reset").on("click", function() {
+            g.transition()
+                .duration(750)
+                .attr("transform", "translate(0,0) scale(1)");
+            
+            nodes.transition()
+                .duration(1000)
+                .attr("transform", d => {
+                    d.x = Math.random() * width;
+                    d.y = Math.random() * height;
+                    return `translate(${d.x},${d.y})`;
+                });
+        });
+    </script>
+</body>
+</html>
